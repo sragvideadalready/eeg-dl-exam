@@ -55,21 +55,34 @@ def main():
           f"class balance={np.bincount(y)}")
 
     # Per-channel z-scoring.
-    mean = X.mean(axis=(0, 2), keepdims=True)
-    std = X.std(axis=(0, 2), keepdims=True) + 1e-6
-    X = ((X - mean) / std).astype(np.float32)
+    # mean = X.mean(axis=(0, 2), keepdims=True)
+    # std = X.std(axis=(0, 2), keepdims=True) + 1e-6
+    # X = ((X - mean) / std).astype(np.float32)
 
     # Subject-independent evaluation: hold out 20% for test, then 20% of the
     # remainder for validation.
-    idx = np.arange(len(y))
-    tr, te = train_test_split(idx, test_size=0.2, stratify=y, random_state=args.seed)
-    tr, va = train_test_split(tr, test_size=0.2, stratify=y[tr], random_state=args.seed)
-    train_subjects = set(groups[tr])
-    test_subjects = set(groups[te])
-    print("Train subs:", train_subjects)
-    print("Test subs:", test_subjects)
+    # idx = np.arange(len(y))
+    # tr, te = train_test_split(idx, test_size=0.2, stratify=y, random_state=args.seed)
+    # tr, va = train_test_split(tr, test_size=0.2, stratify=y[tr], random_state=args.seed)
+    # train_subjects = set(groups[tr])
+    # test_subjects = set(groups[te])
+    # print("Train subs:", train_subjects)
+    # print("Test subs:", test_subjects)
+    # print("Overlap:", train_subjects & test_subjects)
 
-    print("Overlap:", train_subjects & test_subjects)
+    # edit 1 - edited this to have subject aware splits instead of the regular split- leakage
+    subs = np.random.default_rng(args.seed).permutation(np.unique(groups))
+    te_s, va_s = subs[2:4], subs[:2]
+    te = np.where(np.isin(groups, te_s))[0]
+    va = np.where(np.isin(groups, va_s))[0]
+    tr = np.where(~np.isin(groups, np.concatenate([te_s, va_s])))[0]
+    print(f"train {sorted(map(int, subs[4:]))}  val {sorted(map(int, va_s))}  test {sorted(map(int, te_s))}")
+
+    # proper z-scoring 
+    mean= X[tr].mean(axis=(0, 2), keepdims=True)
+    std = X[tr].std(axis=(0, 2), keepdims=True)
+    X = ((X - mean) / (std + 1e-6)).astype(np.float32)
+    
     n_ch, n_t = X.shape[1], X.shape[2]
     model = EEGNet(n_ch, n_t)
     print(f"EEGNet: {count_params(model)} params")
