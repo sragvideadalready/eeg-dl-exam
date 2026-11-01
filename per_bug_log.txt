@@ -1,0 +1,7 @@
+
+after bug 1: sub split
+[0.631] mean 0.631
+after bug 2: normalisation
+[0.631] mean 0.631
+after bug 3: checkpoints
+[0.583] mean 0.583
