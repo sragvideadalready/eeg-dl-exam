@@ -5,3 +5,8 @@ after bug 2: normalisation
 [0.631] mean 0.631
 after bug 3: checkpoints
 [0.583] mean 0.583
+after bug 4: erd baseline is before t=0
+[0.583] mean 0.583
+after bug 5: mne imagined dataset checked and updated
+[0.583] mean 0.583
+after bug 4: erd baseline is before t=0

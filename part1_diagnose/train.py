@@ -17,7 +17,7 @@ from model import EEGNet, count_params
 # TODO: fill in "frontal" with the electrode names you choose.
 CHANNEL_GROUPS = {
     "all": None,
-    "frontal": [],
+    "frontal": ["Fp1", "Fpz", "Fp2", "AF7", "AF3", "AFz", "AF4", "AF8"],
 }
 
 

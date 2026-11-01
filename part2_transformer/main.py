@@ -16,6 +16,8 @@ transformer in models.py — the contrast is the point.
 import argparse
 import numpy as np
 import torch
+import json 
+import torch.nn.functional as Fn
 
 from data import load_data, get_channel_positions
 from models import EEGNet, VanillaEEGTransformer, count_params
@@ -38,7 +40,7 @@ from train import train_model, set_seed
 import torch.nn as nn
 
 
-class YourModel(nn.Module):
+class PatchTransformer(nn.Module):
     def __init__(self, n_chan, n_time, n_classes=2,
                  patch=32, d_model=64, n_heads=4, depth=3, p=0.3):
         super().__init__()
@@ -73,14 +75,19 @@ class YourModel(nn.Module):
 
 
 def run_across_seeds(build_fn, Xtr, ytr, Xte, yte, seeds, device, **kw):
-    accs = []
+    bests, finals = [], []
     for s in seeds:
         set_seed(s)
         model = build_fn()
-        best, _ = train_model(model, Xtr, ytr, Xte, yte, device=device, **kw)
-        accs.append(best)
-        print(f"  seed {s}: best test acc {best:.3f}")
-    return np.array(accs)
+        best, final = train_model(model, Xtr, ytr, Xte, yte, device=device, **kw)
+        bests.append(best); finals.append(final)
+        print(f"  seed {s}: FINAL-epoch test acc {final:.3f}   (peak {best:.3f})")
+    return np.array(bests), np.array(finals)
+
+
+def summarize(name, bests, finals):
+    print(f"{name}: FINAL mean {finals.mean():.3f} std {finals.std():.3f} "
+          f"best {finals.max():.3f} worst {finals.min():.3f} | peak-epoch mean {bests.mean():.3f}")
 
 
 def save_figure(model, Xte, yte, device, path="figure.png"):
@@ -113,53 +120,43 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--epochs", type=int, default=40)
     ap.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2])
+    ap.add_argument("--ablate", action="store_true")
     args = ap.parse_args()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"device: {device}")
-
-    print("\nloading data (first run downloads ~50 MB)...")
+    print("\nloading data...")
     Xtr, ytr, Xte, yte = load_data()
     C, T = Xtr.shape[1], Xtr.shape[2]
     print(f"train {Xtr.shape}  test {Xte.shape}  "
           f"(class balance train {ytr.mean():.2f} / test {yte.mean():.2f})")
 
-    print("\n=== Baseline 1: EEGNet (conv priors) ===")
-    set_seed(0)
-    net = EEGNet(C, T)
-    print(f"params: {count_params(net):,}")
-    best, _ = train_model(net, Xtr, ytr, Xte, yte, epochs=args.epochs,
-                          device=device, verbose=True)
-    print(f"EEGNet best test acc: {best:.3f}")
+    builders = {
+        "EEGNet": lambda: EEGNet(C, T),
+        "Vanilla transformer": lambda: VanillaEEGTransformer(C, T),
+        "Patch transformer (starter)": lambda: PatchTransformer(C, T),
+    }
+    # YourModel rows are added in step 4
 
-    print("\n=== Baseline 2: vanilla transformer (no EEG prior) ===")
-    set_seed(0)
-    vit = VanillaEEGTransformer(C, T)
-    print(f"params: {count_params(vit):,}")
-    accs_v = run_across_seeds(lambda: VanillaEEGTransformer(C, T),
-                              Xtr, ytr, Xte, yte, args.seeds, device,
-                              epochs=args.epochs)
-    print(f"vanilla transformer: best {accs_v.max():.3f}  "
-          f"worst {accs_v.min():.3f}  mean {accs_v.mean():.3f}")
-
-    print("\n=== YOUR MODEL ===")
-    set_seed(0)
-    ym = YourModel(C, T)
-    print(f"params: {count_params(ym):,}")
-    accs = run_across_seeds(lambda: YourModel(C, T),
-                            Xtr, ytr, Xte, yte, args.seeds, device,
-                            epochs=args.epochs)
-    print(f"your model: best {accs.max():.3f}  worst {accs.min():.3f}  "
-          f"mean {accs.mean():.3f}  std {accs.std():.3f}")
+    open("results_part2.jsonl", "w").close()
+    for name, build in builders.items():
+        print(f"\n=== {name} ===")
+        set_seed(0)
+        print(f"params: {count_params(build()):,}")
+        bests, finals = run_across_seeds(build, Xtr, ytr, Xte, yte, args.seeds,
+                                         device, epochs=args.epochs)
+        summarize(name, bests, finals)
+        with open("results_part2.jsonl", "a") as f:
+            for s, b, fi in zip(args.seeds, bests, finals):
+                f.write(json.dumps(dict(model=name, seed=s,
+                                        final_acc=float(fi), peak_acc=float(b))) + "\n")
 
     print("\nsaving figure...")
+    fig_key = "YourModel" if "YourModel" in builders else "Patch transformer (starter)"
     set_seed(0)
-    ym = YourModel(C, T)
-    train_model(ym, Xtr, ytr, Xte, yte, epochs=args.epochs, device=device)
-    save_figure(ym, Xte, yte, device)
-
-    print("\ndone. Report best AND worst in the README — no cherry-picking.")
-
-
+    fm = builders[fig_key]()
+    train_model(fm, Xtr, ytr, Xte, yte, epochs=args.epochs, device=device)
+    save_figure(fm, Xte, yte, device)
+    print("\ndone. Report FINAL-epoch numbers, best AND worst seeds, no cherry-picking.")
 if __name__ == "__main__":
     main()
