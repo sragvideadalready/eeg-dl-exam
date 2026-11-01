@@ -64,7 +64,12 @@ def main():
     idx = np.arange(len(y))
     tr, te = train_test_split(idx, test_size=0.2, stratify=y, random_state=args.seed)
     tr, va = train_test_split(tr, test_size=0.2, stratify=y[tr], random_state=args.seed)
+    train_subjects = set(groups[tr])
+    test_subjects = set(groups[te])
+    print("Train subs:", train_subjects)
+    print("Test subs:", test_subjects)
 
+    print("Overlap:", train_subjects & test_subjects)
     n_ch, n_t = X.shape[1], X.shape[2]
     model = EEGNet(n_ch, n_t)
     print(f"EEGNet: {count_params(model)} params")
